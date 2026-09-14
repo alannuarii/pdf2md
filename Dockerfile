@@ -10,9 +10,14 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Configure pip for network resilience (large wheels & slow connection)
+ENV PIP_DEFAULT_TIMEOUT=1000 \
+    PIP_RETRIES=10
+
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --timeout 1000 --retries 10 -r requirements.txt
 
 # Copy application code
 COPY app/ ./app/
