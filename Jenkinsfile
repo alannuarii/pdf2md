@@ -43,7 +43,10 @@ pipeline {
         stage('Health Check') {
             steps {
                 sleep 5
-                sh 'curl -f http://localhost:${HOST_PORT}/api/health || exit 1'
+                sh '''
+                    # Jalankan health check dari dalam container untuk menghindari masalah jaringan Docker-in-Docker
+                    docker exec ${CONTAINER_NAME} python -c "import urllib.request; urllib.request.urlopen('http://localhost:${CONTAINER_PORT}/api/health')" || exit 1
+                '''
             }
         }
     }
