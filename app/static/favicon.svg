@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#grad)"/>
+  <!-- Document Fold shape -->
+  <path d="M18 14h18l14 14v22a4 4 0 0 1-4 4H18a4 4 0 0 1-4-4V18a4 4 0 0 1 4-4z" fill="#ffffff" fill-opacity="0.95"/>
+  <path d="M36 14v14h14" fill="#cbd5e1"/>
+  <!-- Markdown "M" and arrow symbol in indigo -->
+  <path d="M22 34v12h4v-7l3 5h2l3-5v7h4V34h-4l-4 6-4-6h-4z" fill="#4f46e5"/>
+</svg>

@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  pdf2md:
+    build: .
+    container_name: pdf2md-app
+    restart: always
+    ports:
+      - "3020:8000"

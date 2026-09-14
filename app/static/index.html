@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF to Markdown Converter</title>
+    <meta name="description" content="Konversi file PDF menjadi dokumen Markdown (.md) dengan mempertahankan struktur heading, list, dan tabel secara optimal.">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            50:  '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            300: '#a5b4fc',
+                            400: '#818cf8',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            800: '#3730a3',
+                            900: '#312e81',
+                        },
+                        surface: {
+                            50:  '#f8fafc',
+                            100: '#f1f5f9',
+                            200: '#e2e8f0',
+                            700: '#334155',
+                            800: '#1e293b',
+                            900: '#0f172a',
+                            950: '#020617',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+            min-height: 100vh;
+        }
+
+        /* Animated background orbs */
+        .bg-orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.15;
+            animation: float 20s ease-in-out infinite;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .bg-orb-1 { width: 500px; height: 500px; background: #6366f1; top: -100px; left: -100px; }
+        .bg-orb-2 { width: 400px; height: 400px; background: #8b5cf6; bottom: -80px; right: -80px; animation-delay: -7s; }
+        .bg-orb-3 { width: 300px; height: 300px; background: #06b6d4; top: 50%; left: 50%; transform: translate(-50%, -50%); animation-delay: -14s; }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, -20px) scale(1.05); }
+            66% { transform: translate(-20px, 20px) scale(0.95); }
+        }
+
+        /* Glassmorphism card */
+        .glass-card {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(99, 102, 241, 0.15);
+            box-shadow:
+                0 0 0 1px rgba(255, 255, 255, 0.05),
+                0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Dropzone */
+        .dropzone {
+            border: 2px dashed rgba(99, 102, 241, 0.3);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .dropzone::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at center, rgba(99, 102, 241, 0.05), transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .dropzone:hover, .dropzone.drag-over {
+            border-color: rgba(99, 102, 241, 0.7);
+            background: rgba(99, 102, 241, 0.08);
+            transform: scale(1.01);
+        }
+        .dropzone:hover::before, .dropzone.drag-over::before {
+            opacity: 1;
+        }
+        .dropzone.drag-over {
+            box-shadow: 0 0 30px rgba(99, 102, 241, 0.2);
+        }
+
+        /* Spinner */
+        .spinner {
+            width: 44px;
+            height: 44px;
+            border: 3px solid rgba(99, 102, 241, 0.2);
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Progress bar */
+        .progress-bar-track {
+            height: 4px;
+            background: rgba(99, 102, 241, 0.15);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #6366f1, #8b5cf6);
+            border-radius: 2px;
+            animation: indeterminate 1.5s ease-in-out infinite;
+        }
+        @keyframes indeterminate {
+            0%   { transform: translateX(-100%); width: 40%; }
+            50%  { transform: translateX(60%);   width: 60%; }
+            100% { transform: translateX(200%);  width: 40%; }
+        }
+
+        /* Tabs */
+        .tab-btn {
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .tab-btn.active {
+            color: #a5b4fc;
+        }
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #6366f1, #8b5cf6);
+            border-radius: 2px 2px 0 0;
+        }
+
+        /* Markdown preview styles */
+        .markdown-preview h1 { font-size: 1.875rem; font-weight: 700; margin: 1.5rem 0 0.75rem; color: #e2e8f0; border-bottom: 1px solid rgba(99,102,241,0.2); padding-bottom: 0.5rem; }
+        .markdown-preview h2 { font-size: 1.5rem; font-weight: 600; margin: 1.25rem 0 0.5rem; color: #cbd5e1; }
+        .markdown-preview h3 { font-size: 1.25rem; font-weight: 600; margin: 1rem 0 0.5rem; color: #94a3b8; }
+        .markdown-preview h4, .markdown-preview h5, .markdown-preview h6 { font-size: 1.1rem; font-weight: 500; margin: 0.75rem 0 0.5rem; color: #94a3b8; }
+        .markdown-preview p { margin: 0.5rem 0; line-height: 1.7; color: #cbd5e1; }
+        .markdown-preview ul, .markdown-preview ol { margin: 0.5rem 0; padding-left: 1.5rem; color: #cbd5e1; }
+        .markdown-preview li { margin: 0.25rem 0; line-height: 1.6; }
+        .markdown-preview ul { list-style-type: disc; }
+        .markdown-preview ol { list-style-type: decimal; }
+        .markdown-preview code {
+            background: rgba(99, 102, 241, 0.15);
+            color: #c7d2fe;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.875em;
+        }
+        .markdown-preview pre {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(99, 102, 241, 0.15);
+            border-radius: 8px;
+            padding: 1rem;
+            overflow-x: auto;
+            margin: 0.75rem 0;
+        }
+        .markdown-preview pre code {
+            background: transparent;
+            padding: 0;
+        }
+        .markdown-preview table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            font-size: 0.9rem;
+        }
+        .markdown-preview th {
+            background: rgba(99, 102, 241, 0.15);
+            color: #c7d2fe;
+            font-weight: 600;
+            text-align: left;
+            padding: 0.6rem 0.75rem;
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+        .markdown-preview td {
+            padding: 0.5rem 0.75rem;
+            border: 1px solid rgba(99, 102, 241, 0.1);
+            color: #cbd5e1;
+        }
+        .markdown-preview tr:nth-child(even) { background: rgba(99, 102, 241, 0.04); }
+        .markdown-preview blockquote {
+            border-left: 3px solid #6366f1;
+            padding: 0.5rem 1rem;
+            margin: 0.75rem 0;
+            background: rgba(99, 102, 241, 0.06);
+            color: #94a3b8;
+            border-radius: 0 6px 6px 0;
+        }
+        .markdown-preview a { color: #818cf8; text-decoration: underline; }
+        .markdown-preview hr { border: none; border-top: 1px solid rgba(99,102,241,0.2); margin: 1.5rem 0; }
+        .markdown-preview img { max-width: 100%; border-radius: 8px; margin: 0.5rem 0; }
+
+        /* Truncation banner */
+        .truncation-banner {
+            background: linear-gradient(180deg, transparent, rgba(2, 6, 23, 0.95) 40%);
+            pointer-events: none;
+        }
+        .truncation-banner button {
+            pointer-events: all;
+        }
+
+        /* Button hover glow */
+        .btn-glow {
+            transition: all 0.2s ease;
+        }
+        .btn-glow:hover:not(:disabled) {
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+        }
+
+        /* Toggle switch */
+        .toggle-track {
+            width: 36px;
+            height: 20px;
+            border-radius: 10px;
+            background: rgba(99, 102, 241, 0.2);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            transition: all 0.2s ease;
+            position: relative;
+            cursor: pointer;
+        }
+        .toggle-track.active {
+            background: rgba(99, 102, 241, 0.6);
+            border-color: rgba(99, 102, 241, 0.8);
+        }
+        .toggle-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #cbd5e1;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.2s ease;
+        }
+        .toggle-track.active .toggle-thumb {
+            transform: translateX(16px);
+            background: white;
+        }
+
+        /* Toast */
+        .toast {
+            animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.5s forwards;
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes fadeOut {
+            to { transform: translateY(-20px); opacity: 0; }
+        }
+
+        /* Smooth transitions for state changes */
+        .state-transition {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.3); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.5); }
+
+        /* Raw textarea */
+        #rawMarkdown {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            tab-size: 4;
+            resize: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-200 overflow-x-hidden">
+    <!-- Background Orbs -->
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
+    <div class="bg-orb bg-orb-3"></div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed top-6 right-6 z-50 flex flex-col gap-3"></div>
+
+    <!-- Main Container -->
+    <div class="relative z-10 min-h-screen flex flex-col items-center justify-start px-4 py-10 sm:py-16">
+
+        <!-- Header -->
+        <header class="text-center mb-8 sm:mb-10">
+            <div class="inline-flex items-center gap-3 mb-4">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center shadow-lg shadow-brand-500/25">
+                    <i data-lucide="file-text" class="w-6 h-6 text-white"></i>
+                </div>
+                <h1 class="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-brand-300 via-purple-300 to-cyan-300 bg-clip-text text-transparent">
+                    PDF to Markdown
+                </h1>
+            </div>
+            <p class="text-slate-400 text-sm sm:text-base max-w-md mx-auto">
+                Konversi dokumen PDF ke Markdown dengan preservasi struktur heading, list, dan tabel.
+            </p>
+        </header>
+
+        <!-- Main Card -->
+        <main class="w-full max-w-3xl">
+            <div class="glass-card rounded-2xl p-6 sm:p-8">
+
+                <!-- ===== IDLE STATE: Upload Zone ===== -->
+                <div id="stateIdle" class="state-transition">
+                    <div
+                        id="dropzone"
+                        class="dropzone rounded-xl p-10 sm:p-14 text-center cursor-pointer"
+                        role="button"
+                        tabindex="0"
+                        aria-label="Upload PDF file"
+                    >
+                        <div class="flex flex-col items-center gap-4 relative z-10">
+                            <div class="w-16 h-16 rounded-2xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center">
+                                <i data-lucide="upload-cloud" class="w-8 h-8 text-brand-400"></i>
+                            </div>
+                            <div>
+                                <p class="text-lg font-semibold text-slate-200">
+                                    Drag & drop file PDF di sini
+                                </p>
+                                <p class="text-sm text-slate-400 mt-1">
+                                    atau <span class="text-brand-400 font-medium hover:text-brand-300 transition-colors">klik untuk memilih file</span>
+                                </p>
+                            </div>
+                            <p class="text-xs text-slate-500">
+                                Hanya file .pdf • Maksimum 50 MB
+                            </p>
+                        </div>
+                    </div>
+                    <input type="file" id="fileInput" accept=".pdf,application/pdf" class="hidden">
+
+                    <!-- File info (shown after selection) -->
+                    <div id="fileInfo" class="hidden mt-4 p-4 rounded-lg bg-surface-800/50 border border-surface-700/50">
+                        <div class="flex items-center justify-between gap-4">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <div class="w-10 h-10 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center flex-shrink-0">
+                                    <i data-lucide="file-type" class="w-5 h-5 text-red-400"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <p id="fileName" class="text-sm font-medium text-slate-200 truncate"></p>
+                                    <p id="fileSize" class="text-xs text-slate-400"></p>
+                                </div>
+                            </div>
+                            <button
+                                id="btnConvert"
+                                class="btn-glow flex-shrink-0 px-5 py-2.5 rounded-lg bg-gradient-to-r from-brand-600 to-purple-600 hover:from-brand-500 hover:to-purple-500 text-white font-medium text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                                Konversi
+                            </button>
+                        </div>
+
+                        <!-- Extract Images Toggle -->
+                        <div class="mt-3 pt-3 border-t border-surface-700/30 flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="image" class="w-4 h-4 text-slate-400"></i>
+                                <span class="text-sm text-slate-300">Ekstrak Gambar/Diagram</span>
+                                <span class="text-xs text-slate-500">(unduh sebagai .zip)</span>
+                            </div>
+                            <div id="toggleExtractImages" class="toggle-track" role="switch" aria-checked="false" tabindex="0" aria-label="Toggle extract images">
+                                <div class="toggle-thumb"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== LOADING STATE ===== -->
+                <div id="stateLoading" class="hidden state-transition">
+                    <div class="flex flex-col items-center gap-5 py-14">
+                        <div class="spinner"></div>
+                        <div class="text-center">
+                            <p class="text-lg font-medium text-slate-200">Mengonversi dokumen...</p>
+                            <p id="loadingDetail" class="text-sm text-slate-400 mt-1">Memproses struktur heading, list, dan tabel</p>
+                        </div>
+                        <div class="w-64 progress-bar-track mt-2">
+                            <div class="progress-bar-fill"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== RESULT STATE ===== -->
+                <div id="stateResult" class="hidden state-transition">
+                    <!-- Result Header -->
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                                <i data-lucide="check-circle-2" class="w-5 h-5 text-emerald-400"></i>
+                            </div>
+                            <div>
+                                <h2 class="text-lg font-semibold text-slate-200">Konversi Berhasil</h2>
+                                <p id="resultFilename" class="text-xs text-slate-400"></p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button
+                                id="btnCopy"
+                                class="btn-glow px-3.5 py-2 rounded-lg bg-surface-800/80 border border-surface-700/50 hover:border-brand-500/30 text-sm text-slate-300 flex items-center gap-2 transition-colors"
+                            >
+                                <i data-lucide="clipboard-copy" class="w-4 h-4"></i>
+                                <span>Copy</span>
+                            </button>
+                            <button
+                                id="btnDownload"
+                                class="btn-glow px-3.5 py-2 rounded-lg bg-gradient-to-r from-brand-600 to-purple-600 hover:from-brand-500 hover:to-purple-500 text-sm text-white font-medium flex items-center gap-2"
+                            >
+                                <i data-lucide="download" class="w-4 h-4"></i>
+                                <span>Download .md</span>
+                            </button>
+                            <button
+                                id="btnReset"
+                                class="btn-glow px-3.5 py-2 rounded-lg bg-surface-800/80 border border-surface-700/50 hover:border-brand-500/30 text-sm text-slate-300 flex items-center gap-2 transition-colors"
+                                title="Konversi file baru"
+                            >
+                                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Stats bar -->
+                    <div id="statsBar" class="hidden mb-4 flex items-center gap-4 text-xs text-slate-400">
+                        <span id="statPages" class="flex items-center gap-1"><i data-lucide="book-open" class="w-3.5 h-3.5"></i> <span></span></span>
+                        <span id="statLines" class="flex items-center gap-1"><i data-lucide="align-left" class="w-3.5 h-3.5"></i> <span></span></span>
+                        <span id="statChars" class="flex items-center gap-1"><i data-lucide="type" class="w-3.5 h-3.5"></i> <span></span></span>
+                    </div>
+
+                    <!-- Tabs -->
+                    <div class="flex border-b border-surface-700/50 mb-4">
+                        <button class="tab-btn active px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 transition-colors" data-tab="raw">
+                            <span class="flex items-center gap-2">
+                                <i data-lucide="code-2" class="w-4 h-4"></i>
+                                Raw Markdown
+                            </span>
+                        </button>
+                        <button class="tab-btn px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-slate-200 transition-colors" data-tab="preview">
+                            <span class="flex items-center gap-2">
+                                <i data-lucide="eye" class="w-4 h-4"></i>
+                                Preview
+                            </span>
+                        </button>
+                    </div>
+
+                    <!-- Tab Content -->
+                    <div id="tabRaw" class="tab-content">
+                        <textarea
+                            id="rawMarkdown"
+                            readonly
+                            class="w-full h-96 bg-surface-950/60 border border-surface-700/40 rounded-lg p-4 text-slate-300 focus:outline-none focus:border-brand-500/40"
+                        ></textarea>
+                    </div>
+                    <div id="tabPreview" class="tab-content hidden">
+                        <div class="relative">
+                            <div
+                                id="previewContent"
+                                class="markdown-preview w-full h-96 overflow-y-auto bg-surface-950/60 border border-surface-700/40 rounded-lg p-5"
+                            ></div>
+                            <!-- Truncation overlay (shown for large docs) -->
+                            <div id="truncationBanner" class="hidden absolute bottom-0 left-0 right-0 truncation-banner rounded-b-lg p-4 pt-12 text-center">
+                                <p class="text-sm text-slate-300 mb-2">
+                                    <i data-lucide="alert-circle" class="w-4 h-4 inline-block align-text-bottom mr-1"></i>
+                                    Preview dipotong untuk performa. Menampilkan <span id="truncLineCount" class="text-brand-300 font-medium"></span> dari <span id="totalLineCount" class="text-brand-300 font-medium"></span> baris.
+                                </p>
+                                <button
+                                    id="btnLoadFullPreview"
+                                    class="btn-glow px-4 py-2 rounded-lg bg-brand-600/80 hover:bg-brand-500/80 text-sm text-white font-medium inline-flex items-center gap-2 transition-colors"
+                                >
+                                    <i data-lucide="expand" class="w-4 h-4"></i>
+                                    Tampilkan Seluruh Preview
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ===== ERROR STATE ===== -->
+                <div id="stateError" class="hidden state-transition">
+                    <div class="rounded-xl border border-red-500/20 bg-red-500/5 p-6">
+                        <div class="flex items-start gap-4">
+                            <div class="w-10 h-10 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <i data-lucide="alert-triangle" class="w-5 h-5 text-red-400"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h3 class="text-base font-semibold text-red-300">Konversi Gagal</h3>
+                                <p id="errorMessage" class="text-sm text-red-200/70 mt-1"></p>
+                                <button
+                                    id="btnRetry"
+                                    class="mt-4 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-sm text-red-300 font-medium flex items-center gap-2 transition-colors"
+                                >
+                                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                                    Coba Lagi
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="mt-10 text-center text-xs text-slate-500">
+            <p>PDF to Markdown Converter &middot; Powered by <span class="text-brand-400">pymupdf4llm</span> &amp; <span class="text-purple-400">FastAPI</span></p>
+        </footer>
+    </div>
+
+    <script>
+        // =====================================================================
+        // Constants
+        // =====================================================================
+        const PREVIEW_LINE_LIMIT = 200;      // Lines to render initially
+        const LARGE_DOC_THRESHOLD = 1000;    // Lines threshold for truncation
+
+        // =====================================================================
+        // App State & Elements
+        // =====================================================================
+        const $ = (sel) => document.querySelector(sel);
+        const $$ = (sel) => document.querySelectorAll(sel);
+
+        const els = {
+            dropzone:          $('#dropzone'),
+            fileInput:         $('#fileInput'),
+            fileInfo:          $('#fileInfo'),
+            fileName:          $('#fileName'),
+            fileSize:          $('#fileSize'),
+            btnConvert:        $('#btnConvert'),
+            btnCopy:           $('#btnCopy'),
+            btnDownload:       $('#btnDownload'),
+            btnReset:          $('#btnReset'),
+            btnRetry:          $('#btnRetry'),
+            toggleExtract:     $('#toggleExtractImages'),
+            stateIdle:         $('#stateIdle'),
+            stateLoading:      $('#stateLoading'),
+            stateResult:       $('#stateResult'),
+            stateError:        $('#stateError'),
+            loadingDetail:     $('#loadingDetail'),
+            rawMarkdown:       $('#rawMarkdown'),
+            previewContent:    $('#previewContent'),
+            resultFilename:    $('#resultFilename'),
+            errorMessage:      $('#errorMessage'),
+            toastContainer:    $('#toastContainer'),
+            statsBar:          $('#statsBar'),
+            truncationBanner:  $('#truncationBanner'),
+            truncLineCount:    $('#truncLineCount'),
+            totalLineCount:    $('#totalLineCount'),
+            btnLoadFullPreview:$('#btnLoadFullPreview'),
+        };
+
+        let currentFile = null;
+        let resultData = null;
+        let extractImages = false;
+        let previewTruncated = false;
+
+        // =====================================================================
+        // Utility Functions
+        // =====================================================================
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function formatNumber(n) {
+            return n.toLocaleString('id-ID');
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            const colors = {
+                success: 'bg-emerald-500/90 border-emerald-400/30',
+                error:   'bg-red-500/90 border-red-400/30',
+                info:    'bg-brand-500/90 border-brand-400/30',
+            };
+            toast.className = `toast px-4 py-3 rounded-lg border ${colors[type]} text-white text-sm font-medium shadow-lg backdrop-blur-sm flex items-center gap-2`;
+            const iconName = type === 'success' ? 'check-circle-2' : type === 'error' ? 'x-circle' : 'info';
+            toast.innerHTML = `<i data-lucide="${iconName}" class="w-4 h-4"></i><span>${message}</span>`;
+            els.toastContainer.appendChild(toast);
+            lucide.createIcons({ nodes: [toast] });
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // =====================================================================
+        // State Management
+        // =====================================================================
+        function switchState(state) {
+            [els.stateIdle, els.stateLoading, els.stateResult, els.stateError].forEach(el => el.classList.add('hidden'));
+
+            const stateMap = {
+                idle:    els.stateIdle,
+                loading: els.stateLoading,
+                result:  els.stateResult,
+                error:   els.stateError,
+            };
+
+            if (stateMap[state]) {
+                stateMap[state].classList.remove('hidden');
+            }
+        }
+
+        function resetToIdle() {
+            currentFile = null;
+            resultData = null;
+            previewTruncated = false;
+            els.fileInput.value = '';
+            els.fileInfo.classList.add('hidden');
+            els.truncationBanner.classList.add('hidden');
+            switchState('idle');
+        }
+
+        // =====================================================================
+        // Toggle: Extract Images
+        // =====================================================================
+        els.toggleExtract.addEventListener('click', () => {
+            extractImages = !extractImages;
+            els.toggleExtract.classList.toggle('active', extractImages);
+            els.toggleExtract.setAttribute('aria-checked', extractImages);
+        });
+        els.toggleExtract.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                els.toggleExtract.click();
+            }
+        });
+
+        // =====================================================================
+        // File Selection & Validation
+        // =====================================================================
+        function handleFileSelect(file) {
+            if (!file) return;
+
+            // Client-side validation
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                showToast('Hanya file .pdf yang diizinkan', 'error');
+                return;
+            }
+            if (file.type && file.type !== 'application/pdf') {
+                showToast('Tipe file tidak valid', 'error');
+                return;
+            }
+            if (file.size > 50 * 1024 * 1024) {
+                showToast('Ukuran file melebihi 50 MB', 'error');
+                return;
+            }
+
+            currentFile = file;
+            els.fileName.textContent = file.name;
+            els.fileSize.textContent = formatFileSize(file.size);
+            els.fileInfo.classList.remove('hidden');
+            lucide.createIcons({ nodes: [els.fileInfo] });
+        }
+
+        // =====================================================================
+        // Drag & Drop
+        // =====================================================================
+        ['dragenter', 'dragover'].forEach(evt => {
+            els.dropzone.addEventListener(evt, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                els.dropzone.classList.add('drag-over');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(evt => {
+            els.dropzone.addEventListener(evt, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                els.dropzone.classList.remove('drag-over');
+            });
+        });
+
+        els.dropzone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) handleFileSelect(files[0]);
+        });
+
+        els.dropzone.addEventListener('click', () => els.fileInput.click());
+        els.dropzone.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                els.fileInput.click();
+            }
+        });
+
+        els.fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
+        });
+
+        // =====================================================================
+        // Preview Rendering (with truncation for large docs)
+        // =====================================================================
+        function renderPreview(markdown, forceFullRender = false) {
+            const lines = markdown.split('\n');
+            const totalLines = lines.length;
+
+            if (totalLines > LARGE_DOC_THRESHOLD && !forceFullRender) {
+                // Truncate to first N lines for performance
+                const truncatedMd = lines.slice(0, PREVIEW_LINE_LIMIT).join('\n');
+                els.previewContent.innerHTML = marked.parse(truncatedMd);
+                els.truncLineCount.textContent = formatNumber(PREVIEW_LINE_LIMIT);
+                els.totalLineCount.textContent = formatNumber(totalLines);
+                els.truncationBanner.classList.remove('hidden');
+                previewTruncated = true;
+            } else {
+                els.previewContent.innerHTML = marked.parse(markdown);
+                els.truncationBanner.classList.add('hidden');
+                previewTruncated = false;
+            }
+        }
+
+        // =====================================================================
+        // PDF Conversion
+        // =====================================================================
+        async function convertPDF() {
+            if (!currentFile) return;
+
+            // Show loading with file info
+            const fileSizeStr = formatFileSize(currentFile.size);
+            els.loadingDetail.textContent = `Menganalisis ${currentFile.name} (${fileSizeStr})...`;
+            switchState('loading');
+
+            const formData = new FormData();
+            formData.append('file', currentFile);
+            formData.append('extract_images', extractImages.toString());
+
+            try {
+                const response = await fetch('/api/convert', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                // If extract_images was on and response is a ZIP file
+                if (extractImages && response.headers.get('content-type')?.includes('application/zip')) {
+                    const blob = await response.blob();
+                    const disposition = response.headers.get('content-disposition') || '';
+                    const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+                    const zipFilename = filenameMatch ? filenameMatch[1] : `${currentFile.name.replace('.pdf', '')}.zip`;
+
+                    // Auto-download the ZIP
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = zipFilename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+
+                    showToast(`File ${zipFilename} berhasil diunduh (Markdown + Gambar)`, 'success');
+                    resetToIdle();
+                    return;
+                }
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.detail || `Server error (${response.status})`);
+                }
+
+                const data = await response.json();
+
+                if (!data.success) {
+                    throw new Error(data.detail || 'Konversi gagal');
+                }
+
+                resultData = data;
+                els.rawMarkdown.value = data.markdown;
+                renderPreview(data.markdown);
+                els.resultFilename.textContent = data.filename;
+
+                // Show stats
+                const lines = data.markdown.split('\n').length;
+                const chars = data.markdown.length;
+                const pageCount = data.page_count || '?';
+
+                $('#statPages span:last-child').textContent = `${pageCount} halaman`;
+                $('#statLines span:last-child').textContent = `${formatNumber(lines)} baris`;
+                $('#statChars span:last-child').textContent = `${formatNumber(chars)} karakter`;
+                els.statsBar.classList.remove('hidden');
+                lucide.createIcons({ nodes: [els.statsBar] });
+
+                switchState('result');
+                showToast('Dokumen berhasil dikonversi!', 'success');
+
+            } catch (err) {
+                els.errorMessage.textContent = err.message;
+                switchState('error');
+            }
+        }
+
+        // =====================================================================
+        // Load Full Preview
+        // =====================================================================
+        els.btnLoadFullPreview.addEventListener('click', () => {
+            if (!resultData) return;
+            els.btnLoadFullPreview.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Memuat...';
+
+            // Use requestAnimationFrame to avoid blocking UI
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    renderPreview(resultData.markdown, true);
+                    showToast('Preview lengkap dimuat', 'info');
+                }, 50);
+            });
+        });
+
+        // =====================================================================
+        // Tab Switching
+        // =====================================================================
+        $$('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                $$('.tab-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                const tab = btn.dataset.tab;
+                if (tab === 'raw') {
+                    $('#tabRaw').classList.remove('hidden');
+                    $('#tabPreview').classList.add('hidden');
+                } else {
+                    $('#tabRaw').classList.add('hidden');
+                    $('#tabPreview').classList.remove('hidden');
+                }
+            });
+        });
+
+        // =====================================================================
+        // Actions
+        // =====================================================================
+        els.btnConvert.addEventListener('click', convertPDF);
+
+        els.btnCopy.addEventListener('click', async () => {
+            if (!resultData) return;
+            try {
+                await navigator.clipboard.writeText(resultData.markdown);
+                showToast('Markdown disalin ke clipboard!', 'success');
+            } catch {
+                // Fallback
+                els.rawMarkdown.select();
+                document.execCommand('copy');
+                showToast('Markdown disalin ke clipboard!', 'success');
+            }
+        });
+
+        els.btnDownload.addEventListener('click', () => {
+            if (!resultData) return;
+            const blob = new Blob([resultData.markdown], { type: 'text/markdown;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = resultData.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast(`File ${resultData.filename} diunduh`, 'info');
+        });
+
+        els.btnReset.addEventListener('click', resetToIdle);
+        els.btnRetry.addEventListener('click', resetToIdle);
+
+        // =====================================================================
+        // Initialize Lucide Icons
+        // =====================================================================
+        lucide.createIcons();
+    </script>
+</body>
+</html>

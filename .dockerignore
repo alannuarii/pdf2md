@@ -1,0 +1,50 @@
+# Git
+.git
+.gitignore
+.dockerignore
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Documentation & Spec files (not needed in container runtime)
+PRD.md
+README.md
+docs/
+
+# CI/CD & Orchestration files
+Jenkinsfile
+docker-compose*.yml
+
+# IDE / Editor configuration
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment variables & secrets
+.env
+.env.*
+*.env
+
+# Temporary files & logs
+*.log
+temp/
+tmp/
+*.tmp
+uploads/
+output/
+.pytest_cache/
+.coverage
+htmlcov/
+.DS_Store
+Thumbs.db
